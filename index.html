@@ -3,210 +3,313 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>情書豪華版 - 開發者測試模式</title>
+    <title>情書豪華版：32張與NPC對戰</title>
     <style>
-        /* CSS：負責畫面的外觀 */
-        body { font-family: "Microsoft JhengHei", sans-serif; background-color: #f0f2f5; padding: 20px; }
-        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        body { font-family: "Microsoft JhengHei", sans-serif; background-color: #2c3e50; color: #ecf0f1; padding: 20px; line-height: 1.6; }
+        .container { max-width: 900px; margin: auto; background: #34495e; padding: 20px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { text-align: center; color: #f1c40f; }
         
-        .setup-section { background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
+        /* 遊戲資訊區 */
+        .status-bar { display: flex; justify-content: space-around; background: #2c3e50; padding: 10px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #f1c40f; }
         
-        .game-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-weight: bold; color: #555; }
+        /* 玩家顯示區 */
+        .players-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .player-box { background: #5d6d7e; padding: 15px; border-radius: 10px; text-align: center; border: 3px solid transparent; position: relative; }
+        .player-box.active { border-color: #f1c40f; box-shadow: 0 0 15px #f1c40f; }
+        .player-box.is-out { opacity: 0.4; background: #34495e; text-decoration: line-through; }
+        .player-box.protected { border-color: #2ecc71; }
+        .player-box.protected::after { content: "🛡️ 侍女保護"; display: block; font-size: 12px; color: #2ecc71; }
 
-        /* 玩家區域佈局 */
-        .players-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
-        .player-card { border: 2px solid #dee2e6; padding: 10px; border-radius: 8px; text-align: center; transition: 0.3s; }
-        .player-card.active { border-color: #007bff; background-color: #e7f1ff; } /* 輪到該玩家時變色 */
-        .player-card.is-out { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; opacity: 0.6; }
+        /* 手牌按鈕 */
+        .hand-area { margin-top: 10px; }
+        button { background: #e67e22; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; margin: 2px; font-weight: bold; }
+        button:hover { background: #d35400; }
+        button:disabled { background: #7f8c8d; cursor: not-allowed; }
 
-        /* 按鈕樣式 */
-        button { padding: 8px 16px; cursor: pointer; border: none; border-radius: 4px; background-color: #007bff; color: white; font-size: 14px; transition: 0.2s; }
-        button:hover { background-color: #0056b3; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        /* 日誌區 */
+        #log { background: #1a252f; height: 200px; overflow-y: auto; padding: 15px; border-radius: 5px; font-size: 14px; border-left: 5px solid #f1c40f; }
+        .log-msg { margin-bottom: 5px; border-bottom: 1px solid #2c3e50; padding-bottom: 2px; }
+        .log-important { color: #f1c40f; font-weight: bold; }
 
-        /* 遊戲日誌區 */
-        #log { background: #343a40; color: #d1d1d1; height: 180px; overflow-y: auto; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 13px; line-height: 1.5; }
-        .log-new { color: #52ff52; } /* 新訊息顏色 */
+        /* 方向指示器 */
+        .direction-arrow { font-size: 24px; color: #f1c40f; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>💌 情書豪華版 (32張測試版)</h2>
+    <h1>💌 情書豪華版 (32張)</h1>
 
-    <div class="setup-section">
-        <label>遊玩人數 (2-8人)：</label>
-        <input type="number" id="playerCount" value="4" min="2" max="8" style="width: 50px; padding: 5px;">
-        <button onclick="startGame()">啟動遊戲</button>
+    <div id="setup-view" style="text-align: center;">
+        <p>請輸入玩家人數 (2-8人)：</p>
+        <input type="number" id="playerNum" value="4" min="2" max="8" style="padding: 10px; border-radius: 5px; width: 60px;">
+        <button onclick="initGame()">進入猜拳階段</button>
     </div>
 
-    <div id="game-board" style="display: none;">
-        <div class="game-info">
-            <span>牌庫剩餘：<span id="deckCount">0</span> 張</span>
-            <span id="turnInfo">準備中...</span>
+    <div id="game-view" style="display: none;">
+        <div class="status-bar">
+            <div>牌庫剩餘: <span id="deck-count">0</span></div>
+            <div id="direction-text">方向: 🕒 順時針</div>
+            <div id="turn-text" class="log-important">輪到誰...</div>
         </div>
 
-        <div class="players-grid" id="playerDisplay">
-            </div>
-
-        <div style="margin-bottom: 10px;">
-            <strong>控制台：</strong>
-            <button id="drawBtn" onclick="playerDraw()">抽一張牌 (測試用)</button>
-        </div>
-
+        <div class="players-container" id="players-display"></div>
+        
         <div id="log"></div>
     </div>
 </div>
 
 <script>
-    /**
-     * 變數設定
-     */
-    // 1. 卡牌配置 (8種角色，共32張)
-    const CARD_CONFIG = [
-        { value: 8, name: "公主", count: 2 },
-        { value: 7, name: "伯爵夫人", count: 2 },
-        { value: 6, name: "國王", count: 2 },
-        { value: 5, name: "王子", count: 4 },
-        { value: 4, name: "侍女", count: 4 },
-        { value: 3, name: "男爵", count: 4 },
-        { value: 2, name: "神父", count: 4 },
-        { value: 1, name: "衛兵", count: 10 }
+    // 1. 基本設定
+    const CARDS = [
+        { v: 1, name: "衛兵", count: 10 }, { v: 2, name: "神父", count: 4 },
+        { v: 3, name: "男爵", count: 4 }, { v: 4, name: "侍女", count: 4 },
+        { v: 5, name: "王子", count: 4 }, { v: 6, name: "國王", count: 2 },
+        { v: 7, name: "伯爵夫人", count: 2 }, { v: 8, name: "公主", count: 2 }
     ];
 
-    let deck = [];        // 變數：牌庫陣列
-    let players = [];     // 變數：玩家物件陣列 (內含編號、身份/手牌)
-    let currentPlayer = 0; // 變數：目前輪到哪個編號的玩家
+    let deck = [], players = [], currentPlayer = 0, gameDir = 1; // 1: 順時針, -1: 逆時針
+    let isGameOver = false;
 
-    /**
-     * 遊戲邏輯：啟動與初始化
-     */
-    function startGame() {
-        const count = parseInt(document.getElementById('playerCount').value);
-        if (count < 2 || count > 8) return alert("人數錯誤！");
+    // 2. 初始化遊戲
+    function initGame() {
+        const num = parseInt(document.getElementById('playerNum').value);
+        if (num < 2 || num > 8) return alert("人數需在 2-8 之間");
 
-        // A. 初始化牌庫：根據配置把 32 張牌放進去
+        // 生成牌庫並洗牌
         deck = [];
-        CARD_CONFIG.forEach(card => {
-            for (let i = 0; i < card.count; i++) {
-                // 每張牌存成一個物件，方便後續擴充效果
-                deck.push({ name: card.name, value: card.value });
-            }
-        });
-
-        // B. 洗牌：打亂陣列順序
+        CARDS.forEach(c => { for(let i=0; i<c.count; i++) deck.push({...c}); });
         deck.sort(() => Math.random() - 0.5);
 
-        // C. 初始化玩家：建立玩家編號與初始身分
+        // 初始化玩家
         players = [];
-        for (let i = 0; i < count; i++) {
+        for (let i = 0; i < num; i++) {
             players.push({
-                id: i,                    // 玩家編號
-                name: i === 0 ? "我" : `玩家 ${i + 1}`, 
-                hand: [deck.pop()],        // 玩家身分 (初始發一張)
-                isOut: false,             // 是否淘汰
-                isProtected: false        // 侍女保護狀態
+                id: i,
+                name: i === 0 ? "我" : `NPC ${i}`,
+                hand: [deck.pop()],
+                isOut: false,
+                isProtected: false,
+                isNPC: i !== 0
             });
         }
 
-        // D. 顯示畫面
-        document.getElementById('game-board').style.display = 'block';
-        addLog(`遊戲開始！總共 32 張牌，${count} 位玩家已就位。`);
-        currentPlayer = 0;
-        renderUI();
+        document.getElementById('setup-view').style.display = 'none';
+        document.getElementById('game-view').style.display = 'block';
+        addLog("🎲 遊戲初始化完成，準備猜拳！");
+        startRPS();
     }
 
-    /**
-     * 遊戲邏輯：抽牌測試
-     */
-    function playerDraw() {
-        if (deck.length === 0) {
-            addLog("牌庫已空！");
-            return;
-        }
+    // 3. 猜拳邏輯 (二、三)
+    function startRPS() {
+        const winner = Math.floor(Math.random() * players.length);
+        currentPlayer = winner;
+        addLog(`<span class="log-important">🏆 ${players[winner].name} 猜拳贏了！</span>`);
 
+        if (players[winner].isNPC) {
+            gameDir = Math.random() > 0.5 ? 1 : -1;
+            addLog(`${players[winner].name} 決定輪流方向為：${gameDir === 1 ? '順時針' : '逆時針'}`);
+            startMainLoop();
+        } else {
+            addLog("你是贏家，請決定方向：");
+            let btnCW = document.createElement("button");
+            btnCW.innerText = "順時針";
+            btnCW.onclick = () => { gameDir = 1; startMainLoop(); };
+            let btnCCW = document.createElement("button");
+            btnCCW.innerText = "逆時針";
+            btnCCW.onclick = () => { gameDir = -1; startMainLoop(); };
+            document.getElementById('log').appendChild(btnCW);
+            document.getElementById('log').appendChild(btnCCW);
+        }
+    }
+
+    function startMainLoop() {
+        updateUI();
+        addLog("🚀 遊戲正式開始！");
+        processTurn();
+    }
+
+    // 4. 輪流邏輯 (五、六、八)
+    async function processTurn() {
+        if (isGameOver) return;
+        
         let p = players[currentPlayer];
-        if (p.hand.length >= 2) {
-            addLog(`${p.name} 手牌已滿，請先出牌。`);
+        p.isProtected = false; // 侍女保護消失
+
+        // 抽牌 (五)
+        if (deck.length > 0) {
+            let drawn = deck.pop();
+            p.hand.push(drawn);
+            addLog(`${p.name} 抽了一張牌。`);
+            
+            // 雙公主特殊勝利條件 (八、公主規則)
+            if (p.hand.filter(c => c.v === 8).length === 2) {
+                addLog(`🎉 ${p.name} 抽到了兩張公主！達成特殊勝利！`, true);
+                isGameOver = true;
+                updateUI();
+                return;
+            }
+        } else {
+            checkWinner();
             return;
         }
 
-        const newCard = deck.pop();
-        p.hand.push(newCard);
-        addLog(`${p.name} 抽到了 [${newCard.name}]`);
-        renderUI();
+        updateUI();
+
+        if (p.isNPC) {
+            await sleep(1500);
+            npcAI(p);
+        }
     }
 
-    /**
-     * 畫面渲染：將變數資料轉換成 HTML 文字按鈕
-     */
-    function renderUI() {
-        // 更新剩餘張數
-        document.getElementById('deckCount').innerText = deck.length;
-        document.getElementById('turnInfo').innerText = `現在輪到：${players[currentPlayer].name}`;
+    // 5. 角色功能執行 (七)
+    function playCard(pIdx, cIdx) {
+        let p = players[pIdx];
+        let card = p.hand.splice(cIdx, 1)[0];
+        
+        // 伯爵夫人檢查 (七)
+        const hasLady = p.hand.some(c => c.v === 7) || card.v === 7;
+        const hasRoyalty = p.hand.some(c => c.v === 5 || c.v === 6);
+        if (hasRoyalty && card.v !== 7 && p.hand.some(c => c.v === 7)) {
+            alert("根據規則，手上有王子/國王時必須打出伯爵夫人！");
+            p.hand.push(card); // 歸還
+            return;
+        }
 
-        const display = document.getElementById('playerDisplay');
-        display.innerHTML = ''; // 清空舊內容
+        addLog(`${p.name} 打出了 [${card.name}]`);
 
-        // 幫每個玩家產生一個卡片區塊
-        players.forEach((p, idx) => {
-            const cardDiv = document.createElement('div');
-            cardDiv.className = `player-card ${p.isOut ? 'is-out' : ''} ${idx === currentPlayer ? 'active' : ''}`;
+        // 功能邏輯
+        switch (card.v) {
+            case 1: // 衛兵
+                handleGuard(pIdx); break;
+            case 2: // 神父
+                handlePriest(pIdx); break;
+            case 3: // 男爵
+                handleBaron(pIdx); break;
+            case 4: // 侍女
+                p.isProtected = true; addLog(`${p.name} 本回合無敵。`); break;
+            case 5: // 王子
+                handlePrince(pIdx); break;
+            case 6: // 國王
+                handleKing(pIdx); break;
+            case 8: // 公主
+                p.isOut = true; addLog(`😱 ${p.name} 棄掉了公主，出局！`); break;
+        }
+
+        checkGameStatus();
+        if (!isGameOver) {
+            currentPlayer = (currentPlayer + gameDir + players.length) % players.length;
+            while (players[currentPlayer].isOut) {
+                currentPlayer = (currentPlayer + gameDir + players.length) % players.length;
+            }
+            setTimeout(processTurn, 1000);
+        }
+    }
+
+    // 6. 具體功能實作
+    function handleGuard(meIdx) {
+        let targetIdx = getTarget(meIdx);
+        if (targetIdx === null) return addLog("無效目標。");
+        let guess = players[meIdx].isNPC ? Math.floor(Math.random()*7)+2 : prompt("猜一個身份(2-8):");
+        if (players[targetIdx].hand[0].v == guess) {
+            addLog(`🎯 猜中了！${players[targetIdx].name} 出局！`);
+            players[targetIdx].isOut = true;
+        } else {
+            addLog(`💨 猜錯了。`);
+        }
+    }
+
+    function handleBaron(meIdx) {
+        let tIdx = getTarget(meIdx);
+        if (tIdx === null) return;
+        addLog(`${players[meIdx].name} 與 ${players[tIdx].name} 私下比牌...`);
+        let v1 = players[meIdx].hand[0].v;
+        let v2 = players[tIdx].hand[0].v;
+        if (v1 > v2) { players[tIdx].isOut = true; addLog(`${players[tIdx].name} 點數較小，出局！`); }
+        else if (v1 < v2) { players[meIdx].isOut = true; addLog(`${players[meIdx].name} 點數較小，出局！`); }
+    }
+
+    function handlePrince(meIdx) {
+        let tIdx = players[meIdx].isNPC ? meIdx : prompt("選一位(包含自己)編號:");
+        let t = players[tIdx];
+        addLog(`${t.name} 棄掉了 [${t.hand[0].name}] 並重抽。`);
+        if (t.hand[0].v === 8) { t.isOut = true; addLog("那是公主！出局！"); }
+        else { t.hand = [deck.pop()]; }
+    }
+
+    function handleKing(meIdx) {
+        let tIdx = getTarget(meIdx);
+        if (tIdx === null) return;
+        let temp = players[meIdx].hand[0];
+        players[meIdx].hand[0] = players[tIdx].hand[0];
+        players[tIdx].hand[0] = temp;
+        addLog(`🤝 與 ${players[tIdx].name} 交換了手牌。`);
+    }
+
+    // NPC 簡易決策
+    function npcAI(p) {
+        // 優先打出伯爵夫人
+        let cIdx = p.hand.findIndex(c => c.v === 7 && p.hand.some(h => h.v >= 5));
+        if (cIdx === -1) cIdx = p.hand[0].v === 8 ? 1 : 0; // 避免打出公主
+        playCard(p.id, cIdx);
+    }
+
+    // 輔助工具
+    function getTarget(meIdx) {
+        let validTargets = players.filter(p => !p.isOut && !p.isProtected && p.id !== meIdx);
+        if (validTargets.length === 0) return null;
+        return validTargets[0].id; // 簡化版：NPC 總是選第一個能選的人
+    }
+
+    function updateUI() {
+        document.getElementById('deck-count').innerText = deck.length;
+        document.getElementById('direction-text').innerText = `方向: ${gameDir === 1 ? '🕒 順時針' : 'Counter 逆時針'}`;
+        document.getElementById('turn-text').innerText = `輪到: ${players[currentPlayer].name}`;
+        
+        const display = document.getElementById('players-display');
+        display.innerHTML = '';
+        players.forEach((p, i) => {
+            let div = document.createElement('div');
+            div.className = `player-box ${p.isOut ? 'is-out' : ''} ${i === currentPlayer ? 'active' : ''} ${p.isProtected ? 'protected' : ''}`;
             
-            // 處理手牌顯示 (將手牌陣列轉為按鈕文字)
-            let handHtml = '';
-            if (!p.isOut) {
-                p.hand.forEach((card, cardIdx) => {
-                    handHtml += `<button onclick="playCard(${idx}, ${cardIdx})" style="margin:2px">打出 ${card.name}</button><br>`;
+            let handBtn = "";
+            if (!p.isOut && !p.isNPC) {
+                p.hand.forEach((c, ci) => {
+                    handBtn += `<button onclick="playCard(${i}, ${ci})">${c.name} (${c.v})</button><br>`;
                 });
-            } else {
-                handHtml = '---';
+            } else if (!p.isOut) {
+                handBtn = `<p style="font-size:12px">🎴 持有 ${p.hand.length} 張牌</p>`;
             }
 
-            cardDiv.innerHTML = `
-                <strong>${p.name}</strong><br>
-                身分：${p.isOut ? '淘汰' : '隱藏中'}<br>
-                ${handHtml}
-            `;
-            display.appendChild(cardDiv);
+            div.innerHTML = `<strong>${p.name}</strong><br>${handBtn}`;
+            display.appendChild(div);
         });
     }
 
-    /**
-     * 遊戲邏輯：出牌 (點擊按鈕後觸發)
-     */
-    function playCard(playerIdx, cardIdx) {
-        if (playerIdx !== currentPlayer) {
-            alert("還沒輪到你！");
-            return;
-        }
-
-        // 從玩家手中移除該張牌
-        const playedCard = players[playerIdx].hand.splice(cardIdx, 1)[0];
-        addLog(`${players[playerIdx].name} 打出了 [${playedCard.name}]`);
-
-        // 這裡可以根據 playedCard.value 寫各張牌的效果 (if/switch)
-        if (playedCard.value === 8) {
-            addLog(`${players[playerIdx].name} 誤出了公主，直接淘汰！`);
-            players[playerIdx].isOut = true;
-        }
-
-        // 簡單切換下一位玩家 (跳過已淘汰的)
-        do {
-            currentPlayer = (currentPlayer + 1) % players.length;
-        } while (players[currentPlayer].isOut);
-
-        renderUI();
-    }
-
-    /**
-     * 輔助工具：增加日誌訊息
-     */
-    function addLog(msg) {
+    function addLog(msg, important = false) {
         const log = document.getElementById('log');
-        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        log.innerHTML = `<div class="log-new">[${time}] ${msg}</div>` + log.innerHTML;
+        let div = document.createElement('div');
+        div.className = `log-msg ${important ? 'log-important' : ''}`;
+        div.innerHTML = `> ${msg}`;
+        log.prepend(div);
     }
+
+    function checkGameStatus() {
+        let alive = players.filter(p => !p.isOut);
+        if (alive.length === 1) {
+            addLog(`🏁 遊戲結束！獲勝者是：${alive[0].name}`, true);
+            isGameOver = true;
+        }
+    }
+
+    function checkWinner() {
+        let alive = players.filter(p => !p.isOut);
+        alive.sort((a,b) => b.hand[0].v - a.hand[0].v);
+        addLog(`🏁 牌庫空了！比牌獲勝者：${alive[0].name}`, true);
+        isGameOver = true;
+    }
+
+    function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 </script>
 
 </body>
